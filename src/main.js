@@ -5,15 +5,24 @@
 class TemplateGlanceCard extends HTMLElement {
 	set hass(hass) {
 		if (!this.content) {
-			this.content = document.createElement('hui-glance-card');
-			this.appendChild(this.content);
+			const content = this.content = document.createElement('hui-glance-card');
+			
+			if (this.config) {
+				content.setConfig(this.config);
+			}
+
+			this.appendChild(content);
 		}
 
 		this.content.hass = hass;
 	}
 
 	setConfig(config) {
-		this.content.setConfig(config);
+		this.config = config;
+
+		if (this.content) {
+			this.content.setConfig(config);
+		}
 	}
 
 	getCardSize() {
