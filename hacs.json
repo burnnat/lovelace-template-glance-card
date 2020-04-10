@@ -1,0 +1,5 @@
+{
+	"name": "template-glance-card",
+	"render_readme": true,
+	"homeassistant": "0.108.1"
+}
