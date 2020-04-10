@@ -14,14 +14,47 @@ class TemplateGlanceCard extends HTMLElement {
 			this.appendChild(content);
 		}
 
-		this.content.hass = hass;
+		const states = { ...hass.states };
+		const timestamp = new Date().toISOString();
+
+		Object.keys(this.customEntities).map((key) => {
+			const template = this.customEntities[key];
+
+			states[key] = {
+				entity_id: key,
+				last_changed: timestamp,
+				last_updated: timestamp,
+
+				attributes: {
+					friendly_name: template.name,
+					icon: template.icon
+				},
+				state: template.state
+			};
+		});
+
+		this.content.hass = { ...hass, states };
 	}
 
 	setConfig(config) {
-		this.config = config;
+		this.customEntities = {};
+
+		this.config = {
+			...config,
+			entities: config.entities.map((entry, index) => {
+				if (entry.type === 'template') {
+					const id = 'template_glance_card.' + index;
+					this.customEntities[id] = entry;
+					return { entity: id };
+				}
+				else {
+					return entry;
+				}
+			})
+		};
 
 		if (this.content) {
-			this.content.setConfig(config);
+			this.content.setConfig(this.config);
 		}
 	}
 
