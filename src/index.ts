@@ -15,6 +15,10 @@ interface TemplateEntry {
 	state?: string;
 }
 
+type TemplateKey = keyof TemplateEntry;
+
+const TEMPLATE_KEYS: TemplateKey[] = ['name', 'icon', 'state'];
+
 interface CustomElement extends HTMLElement {
 	hass: any;
 	setConfig(config: object): void;
@@ -94,20 +98,27 @@ class TemplateGlanceCard extends HTMLElement {
 	}
 
 	private initTemplateEntity(id: string, entry: TemplateEntry) {
-		this.customEntities[id] = entry;
+		const entity: TemplateEntry = this.customEntities[id] = {};
 
-		// subscribeRenderTemplate(
-		// 	null,
-		// 	(res) => {
-		// 		this.state[k] = res;
-		// 		this.update();
-		// 	},
-		// 	{
-		// 		template: this._config[k],
-		// 		variables: {config: this._config},
-		// 		entity_ids,
-		// 	}
-		// );
+		TEMPLATE_KEYS.forEach((key) => {
+			const value = entry[key];
+
+			if (hasTemplate(value)) {
+				subscribeRenderTemplate(
+					null,
+					(result) => {
+						entity[key] = result;
+						this.update();
+					},
+					{
+						template: value
+					}
+				);
+			}
+			else {
+				entity[key] = value;
+			}
+		});
 	}
 
 	getCardSize() {
