@@ -1,14 +1,28 @@
-import { LitElement, html, css } from 'card-tools/src/lit-element';
-import { subscribeRenderTemplate, hasTemplate } from 'card-tools/src/templates';
-import { bindActionHandler } from 'card-tools/src/action';
+// import { LitElement, html, css } from 'card-tools/src/lit-element';
+// import { subscribeRenderTemplate, hasTemplate } from 'card-tools/src/templates';
+// import { bindActionHandler } from 'card-tools/src/action';
 
-class TemplateGlanceCard extends LitElement {
-	setConfig(config) {
-		this.config = config;
+class TemplateGlanceCard extends HTMLElement {
+	set hass(hass) {
+		if (!this.content) {
+			this.content = document.createElement('hui-glance-card');
+			this.appendChild(this.content);
+		}
+
+		this.content.hass = hass;
 	}
 
-	render() {
-		return html``;
+	setConfig(config) {
+		this.content.setConfig(config);
+	}
+
+	getCardSize() {
+		if ('getCardSize' in this.content) {
+			return this.content.getCardSize();
+		}
+		else {
+			return 1;
+		}
 	}
 }
 
