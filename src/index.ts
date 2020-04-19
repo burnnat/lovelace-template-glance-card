@@ -1,51 +1,94 @@
 import * as pack from '../package.json';
 
 // import { LitElement, html, css } from 'card-tools/src/lit-element';
-import { subscribeRenderTemplate, hasTemplate } from 'card-tools/src/templates';
+import { subscribeRenderTemplate, hasTemplate, Template, Value } from 'card-tools/src/templates';
 // import { bindActionHandler } from 'card-tools/src/action';
 
+interface Hass {
+	states: {
+		[entityId: string]: {
+			entity_id: string;
+			last_changed: string;
+			last_updated: string;
+		
+			attributes: {
+				friendly_name: string;
+				icon: string;
+			};
+		
+			state: string;
+		}
+	};
+}
+
+type Config = any;
+
 interface TemplateConfig {
-	entities: TemplateEntry[];
+	entities: (EntityConfig | EntityTemplate)[];
 }
 
-interface TemplateEntry {
-	type?: string;
-	name?: string;
-	icon?: string;
-	state?: string;
+interface EntityConfig {
+	type: undefined;
 }
 
-type TemplateKey = keyof TemplateEntry;
+interface EntityTemplate {
+	type: 'template';
+	name?: any;
+	icon?: any;
+	state?: any;
+	active?: any;
+}
 
-const TEMPLATE_KEYS: TemplateKey[] = ['name', 'icon', 'state'];
+interface EntityValues {
+	name?: Value;
+	icon?: Value;
+	state?: Value;
+	active?: Value;
+}
+
+type TemplateKey = keyof EntityValues;
+
+const TEMPLATE_KEYS: TemplateKey[] = ['name', 'icon', 'state', 'active'];
 
 interface CustomElement extends HTMLElement {
-	hass: any;
-	setConfig(config: object): void;
+	hass: Hass;
+	setConfig(config: Config): void;
 	getCardSize(): number;
 }
 
-type Hass = any;
-
 class TemplateGlanceCard extends HTMLElement {
 
-	private hassRaw: Hass;
 	private content: CustomElement;
-	private config: object;
-	private customEntities: {
-		[id: string]: TemplateEntry;
+	private _hass: Hass;
+	private _config: Config;
+
+	private values: {
+		[id: string]: EntityValues;
 	};
 
 	set hass(hass: Hass) {
-		this.hassRaw = hass;
+		this._hass = hass;
 
 		if (!this.content) {
 			const content = this.content = document.createElement('hui-glance-card') as CustomElement;
-			
-			if (this.config) {
-				content.setConfig(this.config);
-			}
 
+			const observer = new MutationObserver((mutations) => {
+				mutations.forEach((mutation) => {
+					mutation.addedNodes.forEach((node) => {
+						if (node.nodeName === 'HA-CARD') {
+							(node as HTMLElement).shadowRoot.addEventListener('slotchange', (event) => {
+								this.updateBadges();
+							});
+						}
+					});
+				});
+			});
+			observer.observe(content.shadowRoot, { childList: true })
+
+			if (this._config) {
+				content.setConfig(this._config);
+			}
+			
 			this.appendChild(content);
 		}
 
@@ -53,52 +96,75 @@ class TemplateGlanceCard extends HTMLElement {
 	}
 
 	private update() {
-		const states = { ...this.hassRaw.states };
+		const states = { ...this._hass.states };
 		const timestamp = new Date().toISOString();
+		
+		Object.keys(this.values).map((key) => {
+			const values = this.values[key];
 
-		Object.keys(this.customEntities).map((key) => {
-			const template = this.customEntities[key];
-
-			states[key] = {
+			const state = states[key] = {
 				entity_id: key,
 				last_changed: timestamp,
 				last_updated: timestamp,
 
 				attributes: {
-					friendly_name: template.name,
-					icon: template.icon
+					friendly_name: values.name,
+					icon: values.icon
 				},
-				state: template.state
+				state: values.state
 			};
 		});
 
-		this.content.hass = { ...this.hassRaw, states };
+		this.content.hass = { ...this._hass, states };
+		this.updateBadges();
+	}
+
+	private updateBadges() {
+		const badges = (
+			this.content
+				.shadowRoot
+				.querySelectorAll('ha-card state-badge')
+		);
+
+		badges.forEach((badge: any) => {
+			const entity = badge.stateObj.entity_id;
+			const values = this.values[entity];
+
+			if (values && values.active) {
+				badge.style.color = getComputedStyle(badge).getPropertyValue(
+					values.active.toLowerCase() === 'true'
+						? '--paper-item-icon-active-color'
+						: '--paper-item-icon-color'
+				);
+			}
+		})
 	}
 
 	setConfig(config: TemplateConfig) {
-		this.customEntities = {};
+		this.values = {};
+		
+		// Replace template entities with placeholders and set up
+		// template rendering function callbacks.
+		const entities = config.entities.map((entry, index) => {
+			if (entry.type === 'template') {
+				const id = 'template_glance_card.' + index;
+				this.values[id] = this.initEntityValues(entry);
+				return { entity: id, state_color: true };
+			}
+			else {
+				return entry;
+			}
+		})
 
-		this.config = {
-			...config,
-			entities: config.entities.map((entry, index) => {
-				if (entry.type === 'template') {
-					const id = 'template_glance_card.' + index;
-					this.initTemplateEntity(id, entry);
-					return { entity: id };
-				}
-				else {
-					return entry;
-				}
-			})
-		};
+		this._config = { ...config, entities };
 
 		if (this.content) {
-			this.content.setConfig(this.config);
+			this.content.setConfig(this._config);
 		}
 	}
 
-	private initTemplateEntity(id: string, entry: TemplateEntry) {
-		const entity: TemplateEntry = this.customEntities[id] = {};
+	private initEntityValues(entry: EntityTemplate): EntityValues {
+		const values: EntityValues = {};
 
 		TEMPLATE_KEYS.forEach((key) => {
 			const value = entry[key];
@@ -107,23 +173,25 @@ class TemplateGlanceCard extends HTMLElement {
 				subscribeRenderTemplate(
 					null,
 					(result) => {
-						entity[key] = result;
+						values[key] = result;
 						this.update();
 					},
-					{
-						template: value
-					}
+					{ template: value }
 				);
 			}
 			else {
-				entity[key] = value;
+				values[key] = String(value) as Value;
 			}
 		});
+
+		return values;
 	}
 
 	getCardSize() {
-		if ('getCardSize' in this.content) {
-			return this.content.getCardSize();
+		const card = this.content;
+		
+		if (card && card.getCardSize) {
+			return card.getCardSize();
 		}
 		else {
 			return 1;
